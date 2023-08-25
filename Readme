@@ -1,0 +1,19 @@
+========================================================================
+                FACIAL EXPRESSION RECOGNITION
+========================================================================
+
+THIS IS A SMALL PROJECT OF MACHINE LEARNING DONE DURING OUR 3rd SEMESTER
+IN THIS REPOSITORY YOU CAN FIND:
+    ->MODEL
+    ->NOTEBOOK
+    ->SMALL APP TO TEST ANY IMAGE OF FACIAL EXPRESSION
+
+IN OUR PROJECT WE USED A SMALL CNN MODEL THAT WE FINE-TUNED.
+AT THE END, AN ACCURACY OF 57% WAS ACHIEVED.
+IT IS NOT THAT GREAT, AND OF COURSE IT CAN BE IMPROVED.
+
+STEPS TO RUN THE APP:
+    -> CREATE A VIRTUAL ENVIRONMENT AND ACTIVATE IT
+    -> IN A TERMINAL, RUN       pip install -r requirements.txt
+    -> RUN           python3 app.py  OR    flask run
+    -> TEST THE IMAGES
