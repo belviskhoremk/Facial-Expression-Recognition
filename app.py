@@ -1,76 +1,69 @@
-from flask import Flask, request, jsonify, render_template
-from PIL import Image
-import io
+"""Flask web app that predicts the facial expression in an uploaded image.
+
+Routes:
+    GET  /         Upload page.
+    POST /predict  Multipart form with a ``file`` image. Returns
+                   ``{"result": "happy", "confidence": 0.82, "probabilities": {...}}``.
+
+Run:
+    python app.py
+"""
+
+from pathlib import Path
+
 import numpy as np
 import tensorflow as tf
-import cv2
+from flask import Flask, jsonify, render_template, request
+from PIL import Image, UnidentifiedImageError
+
+MODEL_PATH = Path(__file__).resolve().parent / "models" / "fer_cnn.h5"
+
+# Output order of the network. Keras' flow_from_directory assigns class
+# indexes alphabetically by folder name, which gives this order.
+EMOTIONS = ["angry", "disgust", "fear", "happy", "neutral", "sad", "surprise"]
+
+INPUT_SIZE = (48, 48)  # FER-2013 image size the model was trained on
 
 app = Flask(__name__)
-
-# Load the trained model
-model = tf.keras.models.load_model('FER.h5')
+model = tf.keras.models.load_model(MODEL_PATH)
 
 
-# Define the route for the prediction endpoint
-@app.route('/', methods=['POST', 'GET'])
+def preprocess(image: Image.Image) -> np.ndarray:
+    """Turn any image into the (1, 48, 48, 3) batch the model expects.
+
+    The training images were 48x48 grayscale faces, loaded as 3-channel RGB by
+    Keras. We reproduce that: grayscale -> resize -> copy into 3 channels ->
+    scale pixels to [0, 1].
+    """
+    gray = np.asarray(image.convert("L").resize(INPUT_SIZE), dtype=np.float32)
+    rgb = np.stack([gray] * 3, axis=-1) / 255.0
+    return np.expand_dims(rgb, axis=0)  # add the batch dimension
+
+
+@app.route("/", methods=["GET"])
+def index():
+    return render_template("index.html")
+
+
+@app.route("/predict", methods=["POST"])
 def predict():
-    if request.method == 'POST':
-        # Read the file from the request
-        file = request.files['file'].read()
+    file = request.files.get("file")
+    if file is None or file.filename == "":
+        return jsonify({"error": "No image uploaded"}), 400
+    try:
+        image = Image.open(file.stream)
+    except UnidentifiedImageError:
+        return jsonify({"error": "The file is not a valid image"}), 400
 
-        # Convert the file to an image
-        img = Image.open(io.BytesIO(file))
-        img = img.convert('L')
+    probs = model.predict(preprocess(image), verbose=0)[0]
+    best = int(np.argmax(probs))
 
-        # Resize the image to the input size expected by the model
-        img = img.resize((48, 48))
-
-        # Convert the image to a numpy array
-        x = np.array(img)
-
-        # Convert grayscale image to 3-channel (RGB)
-        x = cv2.cvtColor(x, cv2.COLOR_GRAY2RGB)
-
-        # Resize the image to the input size expected by the model
-        x = cv2.resize(x, (48, 48))
-
-        # Normalize the pixel values
-        x = x / 255.0
-
-        # Add a batch dimension to the array
-        x = np.expand_dims(x, axis=0)
-
-        # Make the prediction
-        pred = model.predict(x)
-
-        # Get the predicted class label
-        label = np.argmax(pred[0])
-        result = label
-        result=int(result)
-        if result == 0:
-            output = 'angry'
-        elif result==1:
-            output='disgust'
-        elif result==2:
-            output='fear'
-        elif result==3:
-            output='happy'
-        elif result==4:
-            output='neutral'
-        elif result==5:
-            output='sad'
-        elif result==6:
-            output='surprise'
+    return jsonify({
+        "result": EMOTIONS[best],
+        "confidence": float(probs[best]),
+        "probabilities": {emotion: float(p) for emotion, p in zip(EMOTIONS, probs, strict=True)},
+    })
 
 
-        # Return the result as a JSON response
-        return jsonify({'result': output})
-
-    return render_template('deploy.html')
-
-
-
-
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     app.run(debug=True)
